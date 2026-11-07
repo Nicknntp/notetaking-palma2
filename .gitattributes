@@ -1,0 +1,16 @@
+# Text files use LF everywhere (matches existing files; gradlew must be LF to run on Linux/macOS/CI)
+* text=auto eol=lf
+
+# Windows scripts need CRLF
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Binary files: never touch
+*.jar binary
+*.ttf binary
+*.otf binary
+*.png binary
+*.jpg binary
+*.webp binary
+*.jks binary
+*.keystore binary
