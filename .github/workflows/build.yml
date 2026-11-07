@@ -9,6 +9,9 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      # Base64 of the PC's ~/.android/debug.keystore, so CI APKs install over local ones
+      DEBUG_KEYSTORE_B64: ${{ secrets.DEBUG_KEYSTORE_B64 }}
     steps:
       - uses: actions/checkout@v7
 
@@ -20,8 +23,23 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v6
 
+      # AGP signs debug builds with ~/.android/debug.keystore when it exists
+      - name: Install shared debug signing key
+        run: |
+          if [ -z "$DEBUG_KEYSTORE_B64" ]; then
+            echo "::warning::DEBUG_KEYSTORE_B64 secret not set; APK will use a random key and won't install over the PC build"
+            exit 0
+          fi
+          mkdir -p ~/.android
+          echo "$DEBUG_KEYSTORE_B64" | base64 -d > ~/.android/debug.keystore
+
       - name: Build debug APK
         run: ./gradlew assembleDebug --console=plain
+
+      - name: Show APK signer
+        run: |
+          BT="$ANDROID_HOME/build-tools/$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -1)"
+          "$BT/apksigner" verify --print-certs app/build/outputs/apk/debug/*.apk | grep -E "DN:|SHA-256"
 
       - uses: actions/upload-artifact@v7
         with:
