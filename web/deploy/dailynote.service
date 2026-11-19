@@ -1,0 +1,15 @@
+[Unit]
+Description=DailyNote web
+After=network.target
+
+[Service]
+# adjust User and paths to your Pi
+User=pi
+WorkingDirectory=/home/pi/dailynote/web
+Environment=PORT=3000
+Environment=DATA_DIR=/home/pi/dailynote-data
+ExecStart=/usr/bin/node server.js
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target

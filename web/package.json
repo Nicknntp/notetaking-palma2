@@ -1,0 +1,11 @@
+{
+  "name": "dailynote-web",
+  "version": "1.0.0",
+  "private": true,
+  "description": "DailyNote web (PWA) server for Raspberry Pi - zero dependencies, Node 18+",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test test/"
+  },
+  "engines": { "node": ">=18" }
+}
