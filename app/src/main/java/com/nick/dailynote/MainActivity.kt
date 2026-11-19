@@ -226,8 +226,6 @@ private fun TopBar(
         IconBtn(Ico.Calendar, onClick = onCalendar)
         Spacer(Modifier.width(8.dp))
         IconBtn(Ico.Settings, onClick = onSettings)
-        Spacer(Modifier.width(8.dp))
-        MenuBtn()
     }
     Spacer(Modifier.height(12.dp))
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -241,6 +239,9 @@ private fun TopBar(
         Spacer(Modifier.width(8.dp))
         // ไปหน้านิสัย
         IconBtn(Ico.Habit, onClick = onHabits)
+        // เปิดแถบข้าง (อยู่แถวล่าง เพื่อไม่ให้วันที่ถูกตัด)
+        Spacer(Modifier.width(8.dp))
+        MenuBtn()
     }
     Spacer(Modifier.height(4.dp))
 }
