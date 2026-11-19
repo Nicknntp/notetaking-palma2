@@ -151,9 +151,7 @@ internal fun CalendarScreen(
                 }
             }
             Spacer(Modifier.width(6.dp))
-            IconBtn(Ico.Notes, box = small, onClick = onNotes)
-            Spacer(Modifier.width(6.dp))
-            IconBtn(Ico.Settings, box = small, onClick = onSettings)
+            MenuBtn(small)
         }
         Spacer(Modifier.height(10.dp))
 

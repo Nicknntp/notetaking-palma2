@@ -450,7 +450,6 @@ internal fun ShiftReportPage(onCalendar: () -> Unit, onRange: () -> Unit, onBack
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
         ScreenHeader("รายงานค่าเวร", Ico.Back, onBack) {
             IconBtn(Ico.Table, onClick = onRange)
-            IconBtn(Ico.Calendar, onClick = onCalendar)
         }
         Spacer(Modifier.height(12.dp))
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -691,7 +690,7 @@ internal fun ShiftRangePage(onCalendar: () -> Unit, onBack: () -> Unit) {
     }
 
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
-        ScreenHeader("ยอดตามช่วงเวลา", Ico.Back, onBack) { IconBtn(Ico.Calendar, onClick = onCalendar) }
+        ScreenHeader("ยอดตามช่วงเวลา", Ico.Back, onBack)
         Spacer(Modifier.height(12.dp))
         MonthStepper("ตั้งแต่", from) { from = it; if (to.isBefore(it)) to = it }
         MonthStepper("ถึง", to) { to = it; if (from.isAfter(it)) from = it }

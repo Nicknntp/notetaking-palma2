@@ -113,7 +113,7 @@ private fun BudgetMain(
     var eEdit by remember(month) { mutableIntStateOf(-1) }
 
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
-        ScreenHeader("รายรับ-รายจ่าย", Ico.Back, onBack) { IconBtn(Ico.Calendar, onClick = onCalendar) }
+        ScreenHeader("รายรับ-รายจ่าย", Ico.Back, onBack)
         Spacer(Modifier.height(6.dp))
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             IconBtn(Ico.ChevronLeft) { onMonth(month.minusMonths(1)) }

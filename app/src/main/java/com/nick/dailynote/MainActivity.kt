@@ -221,11 +221,10 @@ private fun TopBar(
             Label("${date.format(weekdayFmt)}  ·  ${relativeDay(date)}", FontWeight.Bold, size = 15, color = MUTED, maxLines = 1)
             Label(date.format(fullDateFmt), FontWeight.Bold, size = 27, maxLines = 1)
         }
-        IconBtn(Ico.Notes, onClick = onNotes)
-        Spacer(Modifier.width(8.dp))
+        // หน้าเดือน + นิสัย (เมนูอื่นอยู่ในแถบข้าง)
         IconBtn(Ico.Calendar, onClick = onCalendar)
         Spacer(Modifier.width(8.dp))
-        IconBtn(Ico.Settings, onClick = onSettings)
+        IconBtn(Ico.Habit, onClick = onHabits)
     }
     Spacer(Modifier.height(12.dp))
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -236,10 +235,7 @@ private fun TopBar(
             GroupSep()
             GroupItem(weight = 1f, onClick = onNext) { Icon(Ico.ChevronRight, 24.dp, it) }
         }
-        Spacer(Modifier.width(8.dp))
-        // ไปหน้านิสัย
-        IconBtn(Ico.Habit, onClick = onHabits)
-        // เปิดแถบข้าง (อยู่แถวล่าง เพื่อไม่ให้วันที่ถูกตัด)
+        // เปิดแถบข้าง
         Spacer(Modifier.width(8.dp))
         MenuBtn()
     }

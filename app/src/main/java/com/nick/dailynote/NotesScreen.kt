@@ -107,7 +107,6 @@ internal fun NotesScreen(initial: String?, onBack: () -> Unit, onCalendar: () ->
 
     Column(Modifier.fillMaxSize()) {
         ScreenHeader("โน้ต", Ico.Back, onBack) {
-            IconBtn(Ico.Calendar, onClick = onCalendar)
             IconBtn(Ico.Plus, filled = true) { openStack.add(store.create()) }
         }
         Spacer(Modifier.height(4.dp))
@@ -237,7 +236,6 @@ private fun FreeNotePage(
             Label(if (parentTitle != null) "หน้าย่อย" else "โน้ต", FontWeight.Bold, size = 24, modifier = Modifier.weight(1f).padding(horizontal = 10.dp))
             MenuBtn()
             Spacer(Modifier.width(8.dp))
-            IconBtn(Ico.Calendar, onClick = onCalendar)
             if (confirmDelete) {
                 Btn("ลบเลย", filled = true, icon = Ico.Trash, size = 15) {
                     store.delete(id)

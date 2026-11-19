@@ -32,6 +32,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
 /** เปิดแถบข้าง (null = หน้านี้ไม่มีแถบข้าง) */
@@ -62,9 +63,9 @@ internal fun resolveDest(store: FreeNoteStore, key: String): SideDest? {
 
 /** ปุ่ม ☰ เปิดแถบข้าง (ไม่แสดงถ้าหน้านี้ไม่ได้อยู่ใต้แถบข้าง) */
 @Composable
-internal fun MenuBtn() {
+internal fun MenuBtn(box: Dp = TAP) {
     val open = LocalOpenSidebar.current ?: return
-    IconBtn(Ico.Menu, onClick = open)
+    IconBtn(Ico.Menu, box = box, onClick = open)
 }
 
 /** แถบข้างเลื่อนจากซ้าย แตะนอกแถบหรือกดย้อนกลับเพื่อปิด (ไม่มีแอนิเมชัน เหมาะกับ e-ink) */
