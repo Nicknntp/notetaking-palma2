@@ -72,6 +72,22 @@ enum class AppFont(val key: String, val label: String, val sub: String, val fami
         "sarabun", "Sarabun", "มีหัว แบบตัวพิมพ์ อ่านข้อความยาวสบายตา",
         FontFamily(Font(R.font.sarabun_regular, FontWeight.Normal), Font(R.font.sarabun_bold, FontWeight.Bold))
     ),
+    Kanit(
+        "kanit", "Kanit", "ทันสมัย เหลี่ยมมน อ่านง่าย",
+        FontFamily(Font(R.font.kanit_regular, FontWeight.Normal), Font(R.font.kanit_semibold, FontWeight.Bold))
+    ),
+    Prompt(
+        "prompt", "Prompt", "เรขาคณิต สะอาด ดูเป็นทางการ",
+        FontFamily(Font(R.font.prompt_regular, FontWeight.Normal), Font(R.font.prompt_semibold, FontWeight.Bold))
+    ),
+    Pridi(
+        "pridi", "Pridi", "มีหัว แบบหนังสือ สไตล์คลาสสิก",
+        FontFamily(Font(R.font.pridi_regular, FontWeight.Normal), Font(R.font.pridi_semibold, FontWeight.Bold))
+    ),
+    Mali(
+        "mali", "Mali", "ลายมือเขียน น่ารัก",
+        FontFamily(Font(R.font.mali_regular, FontWeight.Normal), Font(R.font.mali_bold, FontWeight.Bold))
+    ),
     System("system", "ฟอนต์ระบบ", "แบบเดิมของเครื่อง", FontFamily.Default);
 
     companion object {
@@ -305,5 +321,6 @@ internal fun ScreenHeader(title: String, back: ImageVector, onBack: () -> Unit, 
         IconBtn(back, onClick = onBack)
         Label(title, FontWeight.Bold, size = 24, modifier = Modifier.weight(1f).padding(horizontal = 14.dp))
         trailing()
+        MenuBtn()
     }
 }

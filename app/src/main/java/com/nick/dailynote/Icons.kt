@@ -78,12 +78,21 @@ object Ico {
         "M5 3.5h14a1.5 1.5 0 0 1 1.5 1.5v14a1.5 1.5 0 0 1-1.5 1.5H5A1.5 1.5 0 0 1 3.5 19V5A1.5 1.5 0 0 1 5 3.5z"
     )
     val Divider = icon("divider", "M3 12h18", "M8 7.5l4-3.5 4 3.5", "M16 16.5l-4 3.5-4-3.5")
+    val Calculator = icon(
+        "calculator",
+        "M6 2.5h12a2 2 0 0 1 2 2v15a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-15a2 2 0 0 1 2-2z",
+        "M8 6.5h8",
+        "M8 11h.01", "M12 11h.01", "M16 11h.01",
+        "M8 15h.01", "M12 15h.01", "M16 15h.01",
+        "M8 18.5h.01", "M12 18.5h.01", "M16 18.5h.01"
+    )
     val Indent = icon("indent", "M3 8l4 4-4 4", "M21 12H11", "M21 6H11", "M21 18H11")
     val Outdent = icon("outdent", "M7 8l-4 4 4 4", "M21 12H11", "M21 6H11", "M21 18H11")
 
     val Undo = icon("undo", "M9 14L4 9l5-5", "M4 9h10.5a5.5 5.5 0 0 1 0 11H11")
     val Bold = icon("bold", "M7 5h6.5a3.5 3.5 0 0 1 0 7H7z", "M7 12h7.5a3.5 3.5 0 0 1 0 7H7z")
     val Underline = icon("underline", "M7 4v6a5 5 0 0 0 10 0V4", "M5 20h14")
+    val Strike = icon("strike", "M16 7a4 4 0 0 0-8 0c0 2.5 2 3.5 4 5", "M8 17a4 4 0 0 0 8 0c0-1.5-.8-2.5-2-3.2", "M4 12h16")
     val Table = icon(
         "table",
         "M5 3.5h14a1.5 1.5 0 0 1 1.5 1.5v14a1.5 1.5 0 0 1-1.5 1.5H5A1.5 1.5 0 0 1 3.5 19V5A1.5 1.5 0 0 1 5 3.5z",
@@ -107,7 +116,8 @@ object Ico {
     )
     val Minus = icon("minus", "M5 12h14")
     val Bell = icon("bell", "M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9", "M10.3 21a1.94 1.94 0 0 0 3.4 0")
-    val ChevronUp = icon("chevron-up", "M18 15l-6-6-6 6")
+    val Menu = icon("menu", "M4 6h16", "M4 12h16", "M4 18h16")
+    val ChevronUp =icon("chevron-up", "M18 15l-6-6-6 6")
     val ChevronDown = icon("chevron-down", "M6 9l6 6 6-6")
 
     // ---- ตัวเลือก ----

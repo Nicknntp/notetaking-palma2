@@ -47,7 +47,6 @@ import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
-private val dayNamesTh = listOf("อา", "จ", "อ", "พ", "พฤ", "ศ", "ส")
 private val todayFmt = DateTimeFormatter.ofPattern("EEEE d MMMM", Locale("th"))
 
 /** สีตัวอักษรรองบนการ์ดพื้นดำ */
@@ -177,8 +176,11 @@ private fun HabitCard(h: Habit, today: LocalDate, modifier: Modifier, onToggle: 
     val status = if (h.daily) {
         if (streak > 0) "$streak วันติด" else "เริ่มวันนี้เลย"
     } else {
-        val c = HabitStats.weekCount(h, weekStartOf(today))
-        if (c >= h.perWeek) "ครบ ${h.perWeek} ครั้งแล้ว" else "$c/${h.perWeek} สัปดาห์นี้"
+        val ws = weekStartOf(today)
+        val c = HabitStats.weekCount(h, ws)
+        val g = h.goalFor(ws)
+        val star = if (ws in h.weekGoals) " *" else "" // * = เป้าพิเศษของสัปดาห์นี้
+        if (c >= g) "ครบ $g ครั้งแล้ว$star" else "$c/$g สัปดาห์นี้$star"
     }
 
     Column(
@@ -200,15 +202,25 @@ private fun HabitCard(h: Habit, today: LocalDate, modifier: Modifier, onToggle: 
                     .border(2.dp, if (done) PAPER else INK, CircleShape),
                 contentAlignment = Alignment.Center
             ) { if (done) Icon(Ico.Check, 24.dp, INK) }
+            // อีโมจิที่เลือก = ไอคอนของนิสัยนี้
+            if (h.emoji.isNotEmpty()) {
+                Spacer(Modifier.width(10.dp))
+                Box(Modifier.height(38.dp), contentAlignment = Alignment.Center) {
+                    BasicText(h.emoji, style = TextStyle(fontSize = 30.sp))
+                }
+            }
             Spacer(Modifier.weight(1f))
             Box(Modifier.size(34.dp).tap(onOpen), contentAlignment = Alignment.TopEnd) {
                 Icon(Ico.ChevronRight, 22.dp, fg)
             }
         }
         Spacer(Modifier.height(10.dp))
-        HabitTitle(h, 17, fg, 2)
+        HabitTitle(h.copy(emoji = ""), 17, fg, 2)
         Spacer(Modifier.weight(1f))
         Label(status, FontWeight.Bold, size = 14, color = fg, maxLines = 1)
+        if (!h.daily && streak > 0) {
+            Label("ต่อเนื่อง $streak สัปดาห์", size = 12, color = sub, maxLines = 1)
+        }
         if (h.days > 0) {
             Label("วันที่ ${h.dayNumber(today)}/${h.days}", size = 12, color = sub, maxLines = 1)
         }
@@ -325,6 +337,9 @@ internal fun HabitEditor(initial: Habit, onDone: () -> Unit) {
     var name by remember { mutableStateOf(initial.name) }
     var perWeek by remember { mutableIntStateOf(initial.perWeek) }
     var days by remember { mutableIntStateOf(initial.days) }
+    var lastWeekly by remember { mutableIntStateOf(if (initial.perWeek < 7) initial.perWeek else 3) }
+    var weekGoals by remember { mutableStateOf(initial.weekGoals) }
+    var goalWeek by remember { mutableIntStateOf(0) } // 0 = สัปดาห์นี้, -1 = สัปดาห์ก่อน ...
     var emoji by remember { mutableStateOf(initial.emoji) }
     var pickEmoji by remember { mutableStateOf(false) }
     var done by remember { mutableStateOf(initial.done) }
@@ -336,8 +351,14 @@ internal fun HabitEditor(initial: Habit, onDone: () -> Unit) {
 
     fun save() {
         if (name.isBlank()) { error = "ตั้งชื่อนิสัยก่อนนะ"; return }
-        store.upsert(initial.copy(name = name.trim(), perWeek = perWeek, done = done, days = days, emoji = emoji))
+        store.upsert(initial.copy(name = name.trim(), perWeek = perWeek, done = done, days = days, emoji = emoji, weekGoals = weekGoals))
         onDone()
+    }
+
+    // นิสัยที่มีอยู่แล้ว: เลือกอีโมจิแล้วบันทึกทันที (ไม่หายถ้ากดย้อนกลับ)
+    fun setEmoji(e: String) {
+        emoji = e
+        if (!initial.isNew) store.upsert(initial.copy(emoji = e, done = done))
     }
 
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
@@ -380,26 +401,63 @@ internal fun HabitEditor(initial: Habit, onDone: () -> Unit) {
             Btn(if (pickEmoji) "ปิด" else "เลือกอีโมจิ", Modifier.weight(1f), size = 15) { pickEmoji = !pickEmoji }
             if (emoji.isNotEmpty()) {
                 Spacer(Modifier.width(8.dp))
-                Btn("ไม่ใช้", size = 15) { emoji = ""; pickEmoji = false }
+                Btn("ไม่ใช้", size = 15) { setEmoji(""); pickEmoji = false }
             }
         }
         if (pickEmoji) {
             Spacer(Modifier.height(8.dp))
-            EmojiPanel { e -> emoji = e; pickEmoji = false }
+            EmojiPanel { e -> setEmoji(e); pickEmoji = false }
         }
 
         Spacer(Modifier.height(18.dp))
         Label("ความถี่", FontWeight.Bold, size = 15, color = MUTED)
         Spacer(Modifier.height(6.dp))
         Segmented(listOf("ทุกวัน", "กำหนดต่อสัปดาห์"), if (perWeek >= 7) 0 else 1, Modifier.fillMaxWidth()) {
-            perWeek = if (it == 0) 7 else 3
+            perWeek = if (it == 0) 7 else lastWeekly
         }
         if (perWeek < 7) {
             Spacer(Modifier.height(10.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
-                IconBtn(Ico.Minus) { perWeek = (perWeek - 1).coerceAtLeast(1) }
+                IconBtn(Ico.Minus) { perWeek = (perWeek - 1).coerceAtLeast(1); lastWeekly = perWeek }
                 Label("สัปดาห์ละ $perWeek ครั้ง", FontWeight.Bold, TextAlign.Center, 18, modifier = Modifier.weight(1f))
-                IconBtn(Ico.Plus) { perWeek = (perWeek + 1).coerceAtMost(6) }
+                IconBtn(Ico.Plus) { perWeek = (perWeek + 1).coerceAtMost(6); lastWeekly = perWeek }
+            }
+        }
+
+        if (perWeek < 7 && !initial.isNew) {
+            val ws = weekStartOf(LocalDate.now()).plusWeeks(goalWeek.toLong())
+            val custom = weekGoals.containsKey(ws)
+            val goal = weekGoals[ws] ?: perWeek
+            Spacer(Modifier.height(14.dp))
+            Label("เป้าหมายเฉพาะสัปดาห์ (ไม่ตั้ง = ใช้สัปดาห์ละ $perWeek)", FontWeight.Bold, size = 15, color = MUTED)
+            Spacer(Modifier.height(6.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                IconBtn(Ico.Back) { goalWeek = (goalWeek - 1).coerceAtLeast(-4) }
+                Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+                    Label(
+                        if (goalWeek == 0) "สัปดาห์นี้" else "สัปดาห์ที่ ${ws.format(rangeFmt)}",
+                        a = TextAlign.Center, size = 13, color = MUTED, maxLines = 1
+                    )
+                    Label(
+                        if (custom) "$goal ครั้ง (ตั้งเอง)" else "$goal ครั้ง (ค่าเริ่มต้น)",
+                        FontWeight.Bold, TextAlign.Center, 18
+                    )
+                }
+                IconBtn(Ico.ChevronRight) { goalWeek = (goalWeek + 1).coerceAtMost(0) }
+            }
+            Spacer(Modifier.height(8.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                IconBtn(Ico.Minus) { weekGoals = weekGoals + (ws to (goal - 1).coerceAtLeast(1)) }
+                Spacer(Modifier.weight(1f))
+                if (custom) Btn("ใช้ค่าเริ่มต้น", size = 15) { weekGoals = weekGoals - ws }
+                Spacer(Modifier.weight(1f))
+                IconBtn(Ico.Plus) { weekGoals = weekGoals + (ws to (goal + 1).coerceAtMost(7)) }
+            }
+            if (custom) {
+                Spacer(Modifier.height(8.dp))
+                Btn("ใช้เป้า $goal ครั้งกับอีก 4 สัปดาห์ถัดไป", Modifier.fillMaxWidth(), size = 15) {
+                    weekGoals = weekGoals + (1..4).associate { ws.plusWeeks(it.toLong()) to goal }
+                }
             }
         }
 
@@ -410,7 +468,7 @@ internal fun HabitEditor(initial: Habit, onDone: () -> Unit) {
         if (initial.isNew) {
             Label("เคล็ดลับ: เริ่มจากเล็ก ๆ ให้ทำได้ภายใน 2 นาที แล้วค่อยเพิ่มทีหลัง", size = 14, color = MUTED)
         } else {
-            HabitStatsCard(initial.copy(perWeek = perWeek, done = done, days = days)) { d ->
+            HabitStatsCard(initial.copy(perWeek = perWeek, done = done, days = days, weekGoals = weekGoals)) { d ->
                 // ติ๊กย้อนหลัง: บันทึกทันที
                 done = if (d in done) done - d else done + d
                 store.toggle(initial.id, d)
@@ -494,7 +552,8 @@ private fun HabitStatsCard(h: Habit, onToggleDay: (LocalDate) -> Unit) {
         Label("แตะช่องเพื่อติ๊กย้อนหลัง", size = 12, color = GRAY)
         Spacer(Modifier.height(6.dp))
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            dayNamesTh.forEach { Label(it, FontWeight.Bold, TextAlign.Center, 12, MUTED, modifier = Modifier.weight(1f)) }
+            WEEKDAY_NAMES_TH.forEach { Label(it, FontWeight.Bold, TextAlign.Center, 12, MUTED, modifier = Modifier.weight(1f)) }
+            if (!h.daily) Label("เป้า", FontWeight.Bold, TextAlign.Center, 12, MUTED, modifier = Modifier.width(40.dp))
         }
         Spacer(Modifier.height(4.dp))
         val first = weekStartOf(today).minusWeeks(4)
@@ -515,6 +574,13 @@ private fun HabitStatsCard(h: Habit, onToggleDay: (LocalDate) -> Unit) {
                         contentAlignment = Alignment.Center
                     ) {
                         Label(d.dayOfMonth.toString(), size = 11, color = if (d in h.done) PAPER else MUTED, tight = true)
+                    }
+                }
+                if (!h.daily) {
+                    val ws = first.plusWeeks(w.toLong())
+                    val mark = if (ws in h.weekGoals) "*" else ""
+                    Box(Modifier.width(40.dp).height(30.dp), contentAlignment = Alignment.Center) {
+                        Label("${HabitStats.weekCount(h, ws)}/${h.goalFor(ws)}$mark", FontWeight.Bold, TextAlign.Center, 11, MUTED, tight = true)
                     }
                 }
             }

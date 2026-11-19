@@ -26,6 +26,9 @@ internal val checkedRegex = Regex("^ *☑ ")
 internal val todoRegex = Regex("^( *)(☐|☑) ")
 private val boldRegex = Regex("\\*\\*(.+?)\\*\\*")
 private val underlineRegex = Regex("__(.+?)__")
+private val strikeRegex = Regex("~~(.+?)~~")
+/** สีข้อความที่ถูกขีดฆ่า (จางกว่า GRAY) */
+private val STRUCK = Color(0xFFB8B8B8)
 internal val listLineRegex = Regex("^( *)(•|◦|▪|▫|‣|–|☐|☑) ")
 
 /**
@@ -77,8 +80,10 @@ internal class NoteTransformation(
         with(density) { px.toSp() }
     }
 
-    /** ระยะเว้นจากซ้ายของรายการชั้นแรก = กว้างเท่าช่องว่าง 2 ตัว (ตรงกับตอนลบ bullet ครั้งแรก) */
-    private val margin get() = widthSp("  ")
+    /** ระยะเว้นจากซ้ายของรายการชั้นแรก = กว้างเท่าช่องว่าง 5 ตัว (เห็นชัดว่าเยื้องเข้ามาจากขอบซ้าย) */
+    private val margin get() = widthSp("     ")
+    /** ระยะเว้นเพิ่มต่อระดับของข้อย่อย (เพิ่มจากช่องว่างในข้อความ ให้ข้อย่อยเยื้องเข้ามาชัดขึ้น) */
+    private fun levelExtra(indent: String): Float = widthSp("  ").value * (indent.length / INDENT.length)
     private var lastIn: String? = null
     private var lastOut: TransformedText? = null
 
@@ -175,7 +180,7 @@ internal class NoteTransformation(
             val len = line.length
             // ข้อความต่อของรายการ: วางตรงกับข้อความของรายการ (ทั้งบรรทัดแรกและบรรทัดที่ตัดขึ้นใหม่)
             if (owner[i] >= 0 && owner[i] != i) listLineRegex.find(lines[owner[i]])?.let { m ->
-                val textX = margin.value + widthSp(m.value).value
+                val textX = margin.value + levelExtra(m.groupValues[1]) + widthSp(m.value).value
                 val sp = widthSp(line.takeWhile { it == ' ' }).value
                 b.addStyle(
                     ParagraphStyle(
@@ -192,7 +197,7 @@ internal class NoteTransformation(
                     ParagraphStyle(
                         lineHeight = itemLine(m.groupValues[1].length / INDENT.length),
                         lineHeightStyle = NO_TRIM,
-                        textIndent = TextIndent(margin, (margin.value + widthSp(m.value).value).sp)
+                        textIndent = TextIndent((margin.value + levelExtra(m.groupValues[1])).sp, (margin.value + levelExtra(m.groupValues[1]) + widthSp(m.value).value).sp)
                     ),
                     pos, pos + len
                 )
@@ -230,7 +235,7 @@ internal class NoteTransformation(
                 else -> {
                     val m = checkedRegex.find(line)
                     if (m != null && len > m.value.length) {
-                        b.addStyle(SpanStyle(color = GRAY, textDecoration = TextDecoration.LineThrough), pos + m.value.length, pos + len)
+                        b.addStyle(SpanStyle(color = STRUCK, textDecoration = TextDecoration.LineThrough), pos + m.value.length, pos + len)
                     }
                 }
             }
@@ -249,6 +254,13 @@ internal class NoteTransformation(
                     b.addStyle(HIDDEN, a, a + 2)
                     b.addStyle(HIDDEN, z - 2, z)
                     b.addStyle(SpanStyle(textDecoration = TextDecoration.Underline), a + 2, z - 2)
+                }
+                for (m in strikeRegex.findAll(line)) {
+                    val a = pos + m.range.first
+                    val z = pos + m.range.last + 1
+                    b.addStyle(HIDDEN, a, a + 2)
+                    b.addStyle(HIDDEN, z - 2, z)
+                    b.addStyle(SpanStyle(color = STRUCK, textDecoration = TextDecoration.LineThrough), a + 2, z - 2)
                 }
             }
             pos += len + 1
@@ -283,7 +295,7 @@ internal class NoteTransformation(
                 val st = if (r in headerRows) style.copy(fontWeight = FontWeight.Bold) else style
                 for (c in 0 until pipes.size - 1) {
                     val content = line.substring(pipes[c] + 1, pipes[c + 1])
-                        .replace(BOLD_MARK, "").replace(UNDERLINE_MARK, "")
+                        .replace(BOLD_MARK, "").replace(UNDERLINE_MARK, "").replace(STRIKE_MARK, "")
                     val w = if (content.isEmpty()) 0 else measurer.measure(content, st).size.width
                     cells += Cell(c, starts[r] + pipes[c + 1], w)
                     colW[c] = maxOf(colW[c] ?: 0, w)
@@ -362,6 +374,29 @@ internal fun DrawScope.drawTables(l: TextLayoutResult, hPad: Float, vPad: Float)
             }
         }
     }
+}
+
+/**
+ * แตะที่ช่องว่างหน้า • ☐ (ซ้ายของสัญลักษณ์ ในแถวแรกของรายการ) -> คืนตำแหน่งต้นข้อความของรายการ
+ * (หลังสัญลักษณ์และช่องว่าง) เพื่อให้เคอร์เซอร์ไปอยู่หน้าตัวอักษรซ้ายสุด; คืน null ถ้าไม่ได้แตะตรงนั้น
+ */
+internal fun listMarginTapTarget(
+    v: TextFieldValue,
+    l: TextLayoutResult,
+    pos: Offset,
+    tf: NoteTransformation
+): Int? {
+    val text = v.text
+    val shown = tf.of(text)
+    if (l.layoutInput.text.text != shown.text.text || pos.y < 0f) return null
+    val map = shown.offsetMapping
+    val off = map.transformedToOriginal(l.getOffsetForPosition(pos))
+    val ls = text.lastIndexOf('\n', off - 1) + 1
+    val le = text.indexOf('\n', ls).let { if (it < 0) text.length else it }
+    val m = listLineRegex.find(text.substring(ls, le)) ?: return null
+    val r = l.getBoundingBox(map.originalToTransformed(ls + m.groupValues[1].length))
+    if (pos.x >= r.left || pos.y < r.top || pos.y > r.bottom) return null
+    return ls + m.value.length
 }
 
 /** แตะที่ช่อง ☐/☑ เพื่อสลับสถานะ (คืน null ถ้าไม่ได้แตะที่ช่อง) */

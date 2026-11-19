@@ -121,7 +121,11 @@ private fun MiniHabitCard(h: Habit, date: LocalDate, future: Boolean, modifier: 
     val status = when {
         h.days > 0 -> "วันที่ ${h.dayNumber(date)}/${h.days}"
         h.daily -> HabitStats.currentStreak(h, date).let { if (it > 0) "$it วันติด" else "ทุกวัน" }
-        else -> "${HabitStats.weekCount(h, weekStartOf(date))}/${h.perWeek} สัปดาห์นี้"
+        else -> {
+            val n = HabitStats.currentStreak(h, date)
+            "${HabitStats.weekCount(h, weekStartOf(date))}/${h.goalFor(weekStartOf(date))} สัปดาห์นี้" +
+                if (n > 0) " · $n สัปดาห์ติด" else ""
+        }
     }
     Row(
         modifier

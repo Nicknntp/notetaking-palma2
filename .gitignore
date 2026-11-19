@@ -25,3 +25,7 @@ keystore.properties
 *.log
 .DS_Store
 Thumbs.db
+
+# web version
+web/data/
+web/node_modules/

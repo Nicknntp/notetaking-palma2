@@ -39,6 +39,12 @@ object AppSettings {
     fun font(c: Context) = AppFont.of(prefs(c).getString("font", null))
     fun setFont(c: Context, f: AppFont) = prefs(c).edit().putString("font", f.key).apply()
 
+    /** เมนูแถบข้าง (เรียงตามลำดับที่แสดง) คั่นด้วย "," เช่น today,notes,note:123 */
+    fun sidebarItems(c: Context): List<String> =
+        prefs(c).getString("sidebar_items", null)?.split(',')?.filter { it.isNotBlank() } ?: DEFAULT_SIDE
+    fun setSidebarItems(c: Context, items: List<String>) =
+        prefs(c).edit().putString("sidebar_items", items.joinToString(",")).apply()
+
     /** หน้าปฏิทินเปิดแบบ 0 = สัปดาห์, 1 = เดือน */
     fun calendarMode(c: Context) = prefs(c).getInt("calendar_mode", 0)
     fun setCalendarMode(c: Context, m: Int) = prefs(c).edit().putInt("calendar_mode", m).apply()

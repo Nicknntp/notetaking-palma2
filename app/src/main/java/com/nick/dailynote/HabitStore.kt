@@ -20,9 +20,14 @@ data class Habit(
     /** ระยะเวลาที่ตั้งใจทำ (วัน) นับจากวันเริ่ม; 0 = ไม่กำหนด */
     val days: Int = 0,
     /** อีโมจิประจำนิสัย (ว่าง = ไม่ใช้) */
-    val emoji: String = ""
+    val emoji: String = "",
+    /** เป้าหมายเฉพาะสัปดาห์ (key = วันอาทิตย์ต้นสัปดาห์); ไม่มี = ใช้ [perWeek] */
+    val weekGoals: Map<LocalDate, Int> = emptyMap()
 ) {
     val daily get() = perWeek >= 7
+
+    /** เป้าหมายของสัปดาห์ที่เริ่มวัน [ws] */
+    fun goalFor(ws: LocalDate): Int = weekGoals[ws] ?: perWeek
     val isNew get() = id.isEmpty()
 
     /** วันเริ่มนับสถิติ: วันที่สร้าง หรือวันแรกที่ติ๊ก (กรณีติ๊กย้อนหลัง) */
@@ -48,8 +53,11 @@ data class Habit(
     }
 }
 
-/** สัปดาห์เริ่มวันอาทิตย์ (ตรงกับปฏิทินในแอป) */
-internal fun weekStartOf(d: LocalDate): LocalDate = d.minusDays((d.dayOfWeek.value % 7).toLong())
+/** สัปดาห์เริ่มวันจันทร์ (ตรงกับปฏิทินในแอป) */
+internal fun weekStartOf(d: LocalDate): LocalDate = d.minusDays((d.dayOfWeek.value - 1).toLong())
+
+/** ชื่อวันย่อ เรียงจันทร์ → อาทิตย์ ให้ตรงกับ [weekStartOf] */
+internal val WEEKDAY_NAMES_TH = listOf("จ", "อ", "พ", "พฤ", "ศ", "ส", "อา")
 
 /** เก็บนิสัยทั้งหมดในไฟล์ habits.json ในเครื่อง */
 class HabitStore(ctx: Context) {
@@ -69,7 +77,17 @@ class HabitStore(ctx: Context) {
                     created = LocalDate.parse(o.getString("created")),
                     done = (0 until d.length()).mapNotNull { runCatching { LocalDate.parse(d.getString(it)) }.getOrNull() }.toSet(),
                     days = o.optInt("days", 0),
-                    emoji = o.optString("emoji", "")
+                    emoji = o.optString("emoji", ""),
+                    weekGoals = o.optJSONObject("weekGoals")?.let { g ->
+                        g.keys().asSequence().mapNotNull { k ->
+                            runCatching {
+                                var ws = LocalDate.parse(k)
+                                // ข้อมูลเดิมใช้สัปดาห์เริ่มวันอาทิตย์ → ย้ายไปวันจันทร์ถัดไป
+                                if (ws.dayOfWeek == java.time.DayOfWeek.SUNDAY) ws = ws.plusDays(1)
+                                ws to g.getInt(k)
+                            }.getOrNull()
+                        }.toMap()
+                    } ?: emptyMap()
                 )
             }
         }.getOrDefault(emptyList())
@@ -85,6 +103,9 @@ class HabitStore(ctx: Context) {
                 put("created", h.created.toString())
                 put("days", h.days)
                 put("emoji", h.emoji)
+                if (h.weekGoals.isNotEmpty()) put("weekGoals", JSONObject().apply {
+                    h.weekGoals.forEach { (k, v) -> put(k.toString(), v) }
+                })
                 put("done", JSONArray(h.done.sorted().map { it.toString() }))
             })
         }
@@ -114,7 +135,7 @@ object HabitStats {
     fun weekCount(h: Habit, weekStart: LocalDate) =
         (0L until 7L).count { weekStart.plusDays(it) in h.done }
 
-    private fun weekMet(h: Habit, ws: LocalDate) = weekCount(h, ws) >= h.perWeek
+    private fun weekMet(h: Habit, ws: LocalDate) = weekCount(h, ws) >= h.goalFor(ws)
 
     /** ต่อเนื่องตอนนี้: วัน (ทำทุกวัน) หรือ สัปดาห์ (ตั้งเป้าต่อสัปดาห์) — วันนี้ยังไม่ทำก็ยังไม่ถือว่าขาด */
     fun currentStreak(h: Habit, today: LocalDate = LocalDate.now()): Int {
@@ -159,7 +180,9 @@ object HabitStats {
         val from = maxOf(today.minusDays(29), h.since)
         val days = ChronoUnit.DAYS.between(from, today).toInt() + 1
         val done = h.done.count { !it.isBefore(from) && !it.isAfter(today) }
-        val expected = if (h.daily) days.toDouble() else days * h.perWeek / 7.0
+        val expected = if (h.daily) days.toDouble() else (0 until days).sumOf { i ->
+            h.goalFor(weekStartOf(from.plusDays(i.toLong()))) / 7.0
+        }
         if (expected <= 0) return 0
         return minOf(100, (done * 100 / expected).toInt())
     }

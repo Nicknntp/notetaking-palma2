@@ -53,9 +53,8 @@ private val monthFmt = DateTimeFormatter.ofPattern("MMMM yyyy", TH)
 private val shortFmt = DateTimeFormatter.ofPattern("d MMM", TH)
 private val shortYearFmt = DateTimeFormatter.ofPattern("d MMM yyyy", TH)
 private val agendaFmt = DateTimeFormatter.ofPattern("EEEE d MMMM", TH)
-private val dayNames = listOf("อา", "จ", "อ", "พ", "พฤ", "ศ", "ส")
 
-private fun weekStart(d: LocalDate): LocalDate = d.minusDays((d.dayOfWeek.value % 7).toLong()) // เริ่มวันอาทิตย์
+private fun weekStart(d: LocalDate): LocalDate = d.minusDays((d.dayOfWeek.value - 1).toLong()) // เริ่มวันจันทร์
 
 /** บรรทัดแรกของบันทึกที่มีเนื้อหา ตัดสัญลักษณ์ลิสต์/หัวข้อออก ใช้เป็นตัวอย่างในหน้าปฏิทิน */
 private fun notePreview(text: String): String? =
@@ -63,7 +62,7 @@ private fun notePreview(text: String): String? =
         .filterNot { isTableSeparator(it) }
         .map {
             it.trim().trimStart('#', '•', '◦', '▪', '▫', '‣', '–', '☐', '☑', ' ')
-                .replace(BOLD_MARK, "").replace(UNDERLINE_MARK, "")
+                .replace(BOLD_MARK, "").replace(UNDERLINE_MARK, "").replace(STRIKE_MARK, "")
                 .replace('|', ' ').replace(Regex(" {2,}"), " ").trim()
         }
         .firstOrNull { it.isNotEmpty() && !isDividerLine(it) }
@@ -105,6 +104,9 @@ internal fun CalendarScreen(
     } else {
         val m = YearMonth.from(anchor); m.atDay(1) to m.plusMonths(1).atDay(1)
     }
+    val shifts = remember(anchor.year, anchor.monthValue, version) { ShiftStore.month(ctx, YearMonth.from(anchor)) }
+    // เวรที่ผูกกับนัดในปฏิทินแสดงเป็นนัดปกติ (แตะแก้ไขได้) ส่วนเวรที่ไม่มีนัดแสดงเป็นชิปแยก
+    val looseShifts = remember(shifts) { shifts.mapValues { (_, l) -> l.filter { it.eventId == null } } }
     val events = remember(from, until, granted, version, showCal) {
         if (showCal) CalendarSource.events(ctx, from, until) else emptyMap()
     }
@@ -127,7 +129,9 @@ internal fun CalendarScreen(
     val openNew: (LocalDate) -> Unit = { d -> editing = newDraft(d) to null }
     val openEvent: (CalEvent) -> Unit = { ev -> editing = CalendarSource.toDraft(ev) to CalendarSource.readOnlyReason(ev) }
 
-    CompositionLocalProvider(LocalCalStyles provides styles) {
+    // เวรใช้รูปแบบเดียวกับปฏิทินเวรนิค
+    val shiftStyle = styles[ShiftStore.shiftCalendar(ctx)] ?: CalStyle.Bar
+    CompositionLocalProvider(LocalCalStyles provides styles, LocalShiftStyle provides shiftStyle) {
     Column(Modifier.fillMaxSize()) {
         // แถวบน: ย้อนกลับ | นิสัย/เดือน | ซิงก์ | โน้ต | ตั้งค่า (เพิ่มนัดใช้ปุ่ม + ในแต่ละวัน)
         val small = 42.dp
@@ -215,8 +219,9 @@ internal fun CalendarScreen(
             if (mode == 0) {
                 HabitBoard(version, onEdit = { habitEdit = it }, onChanged = { version++ })
             } else {
-                MonthView(store, YearMonth.from(anchor), anchor, events,
-                    onSelect = { anchor = it }, onOpenNote = onPick, onEvent = openEvent, onAdd = openNew)
+                MonthView(store, YearMonth.from(anchor), anchor, events, looseShifts, version,
+                    onSelect = { anchor = it }, onOpenNote = onPick, onEvent = openEvent, onAdd = openNew,
+                    onShiftChanged = { version++ })
             }
         }
 
@@ -231,6 +236,7 @@ internal fun CalendarScreen(
 
 /** รูปแบบของแต่ละปฏิทิน (id -> รูปแบบ) ใช้ทั่วหน้าปฏิทิน */
 private val LocalCalStyles = compositionLocalOf { emptyMap<Long, CalStyle>() }
+private val LocalShiftStyle = compositionLocalOf { CalStyle.Bar }
 
 /** แถวนัดหนึ่งรายการ: เวลา + ชื่อ (แตะเพื่อดู/แก้ไข) */
 @Composable
@@ -241,7 +247,7 @@ private fun EventLine(ev: CalEvent, onEvent: (CalEvent) -> Unit) {
     ) {
         StyleSwatch(LocalCalStyles.current[ev.calendarId] ?: CalStyle.Bar)
         Spacer(Modifier.width(10.dp))
-        Label(ev.timeLabel, FontWeight.Bold, size = 14, color = MUTED, modifier = Modifier.width(58.dp))
+        Label(ev.timeLabel, FontWeight.Bold, size = 14, color = MUTED, modifier = Modifier.width(102.dp), maxLines = 1)
         Label(ev.title, size = 17, maxLines = 1, modifier = Modifier.weight(1f))
     }
 }
@@ -261,20 +267,23 @@ private fun MonthView(
     month: YearMonth,
     selected: LocalDate,
     events: Map<LocalDate, List<CalEvent>>,
+    shifts: Map<LocalDate, List<ShiftEntry>>,
+    version: Int,
     onSelect: (LocalDate) -> Unit,
     onOpenNote: (LocalDate) -> Unit,
     onEvent: (CalEvent) -> Unit,
-    onAdd: (LocalDate) -> Unit
+    onAdd: (LocalDate) -> Unit,
+    onShiftChanged: () -> Unit
 ) {
     val withNotes = remember(month) { store.dates().toSet() }
     val today = LocalDate.now()
-    val lead = month.atDay(1).dayOfWeek.value % 7
+    val lead = month.atDay(1).dayOfWeek.value - 1
     val daysInMonth = month.lengthOfMonth()
     val rows = (lead + daysInMonth + 6) / 7
 
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
         Row(Modifier.fillMaxWidth().padding(bottom = 4.dp)) {
-            dayNames.forEach {
+            WEEKDAY_NAMES_TH.forEach {
                 Label(it, FontWeight.Bold, TextAlign.Center, 13, MUTED, modifier = Modifier.weight(1f))
             }
         }
@@ -286,7 +295,7 @@ private fun MonthView(
                     Box(Modifier.weight(1f).fillMaxHeight()) {
                         if (dayNum in 1..daysInMonth) {
                             val d = month.atDay(dayNum)
-                            MonthCell(d, d == today, d == selected, d in withNotes, events[d].orEmpty()) { onSelect(d) }
+                            MonthCell(d, d == today, d == selected, d in withNotes, events[d].orEmpty(), shifts[d].orEmpty()) { onSelect(d) }
                         }
                     }
                     if (c < 6) Box(Modifier.width(1.dp).fillMaxHeight().background(HAIRLINE))
@@ -297,8 +306,9 @@ private fun MonthView(
 
         // รายละเอียดวันที่เลือก
         Spacer(Modifier.height(14.dp))
-        DayAgenda(selected, events[selected].orEmpty(), notePreview(store.read(selected)), onOpenNote, onEvent, onAdd)
+        DayAgenda(selected, events[selected].orEmpty(), notePreview(store.read(selected)), version, onOpenNote, onEvent, onAdd, onShiftChanged)
         Spacer(Modifier.height(16.dp))
+
     }
 }
 
@@ -307,23 +317,31 @@ private fun DayAgenda(
     d: LocalDate,
     evs: List<CalEvent>,
     preview: String?,
+    version: Int,
     onOpenNote: (LocalDate) -> Unit,
     onEvent: (CalEvent) -> Unit,
-    onAdd: (LocalDate) -> Unit
+    onAdd: (LocalDate) -> Unit,
+    onShiftChanged: () -> Unit
 ) {
+    var addingShift by remember(d) { mutableStateOf(false) }
+    Label(d.format(agendaFmt), FontWeight.Bold, size = 19, maxLines = 1)
+    Label(if (evs.isEmpty()) "ไม่มีนัด" else "${evs.size} นัด", size = 13, color = MUTED)
+    Spacer(Modifier.height(8.dp))
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        Column(Modifier.weight(1f)) {
-            Label(d.format(agendaFmt), FontWeight.Bold, size = 19, maxLines = 1)
-            Label(if (evs.isEmpty()) "ไม่มีนัด" else "${evs.size} นัด", size = 13, color = MUTED)
+        Btn("บันทึก", Modifier.weight(1f), size = 15, icon = Ico.Pencil) { onOpenNote(d) }
+        Spacer(Modifier.width(8.dp))
+        Btn(if (addingShift) "ยกเลิก" else "เพิ่มเวร", Modifier.weight(1f), size = 15, icon = if (addingShift) null else Ico.Plus) {
+            addingShift = !addingShift
         }
-        Btn("บันทึก", size = 15, icon = Ico.Pencil) { onOpenNote(d) }
         Spacer(Modifier.width(8.dp))
         AddBox { onAdd(d) }
     }
+    if (addingShift) ShiftAddPicker(d, onDone = { addingShift = false }, onChanged = onShiftChanged)
     Spacer(Modifier.height(8.dp))
     Rule(HAIRLINE, 1.dp)
     Spacer(Modifier.height(4.dp))
     evs.forEach { EventLine(it, onEvent) }
+    ShiftDayLines(d, version, onShiftChanged)
     if (preview != null) {
         Spacer(Modifier.height(6.dp))
         Box(Modifier.tap { onOpenNote(d) }) { NotePreviewLine(preview) }
@@ -346,9 +364,14 @@ private fun MonthCell(
     isSel: Boolean,
     hasNote: Boolean,
     evs: List<CalEvent>,
+    shifts: List<ShiftEntry>,
     onClick: () -> Unit
 ) {
-    val shown = evs.take(3)
+    // นัดก่อน แล้วตามด้วยเวรที่ไม่มีนัดในปฏิทิน รวมสูงสุด 3 บรรทัด
+    val shiftStyle = LocalShiftStyle.current
+    val chips = evs.map { Triple(it.title, LocalCalStyles.current[it.calendarId] ?: CalStyle.Bar, 12) } +
+        shifts.map { Triple(it.name, shiftStyle, 12) }
+    val shown = chips.take(3)
     Column(
         Modifier
             .fillMaxSize()
@@ -365,17 +388,14 @@ private fun MonthCell(
             }
             Spacer(Modifier.weight(1f))
             when {
-                evs.size > shown.size -> Label("+${evs.size - shown.size}", FontWeight.Bold, size = 11, color = MUTED)
+                chips.size > shown.size -> Label("+${chips.size - shown.size}", FontWeight.Bold, size = 11, color = MUTED)
                 hasNote -> Icon(Ico.Pencil, 12.dp, MUTED)
             }
         }
         Spacer(Modifier.height(2.dp))
         // ชื่อนัดสูงสุด 3 รายการ แต่ละปฏิทินมีรูปแบบของตัวเอง (ขีดซ้าย / พื้นดำ / กรอบ / พื้นเทา / ตัวจาง)
-        val styles = LocalCalStyles.current
-        shown.forEach {
-            Box(Modifier.padding(bottom = 2.dp)) {
-                EventChip(it.title, styles[it.calendarId] ?: CalStyle.Bar)
-            }
+        shown.forEach { (text, style, size) ->
+            Box(Modifier.padding(bottom = 2.dp)) { EventChip(text, style, size) }
         }
     }
 }

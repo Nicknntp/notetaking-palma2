@@ -34,7 +34,10 @@ data class CalEvent(
     val recurring: Boolean
 ) {
     val timeLabel: String
-        get() = if (start == null) "ทั้งวัน" else "%02d:%02d".format(start.hour, start.minute)
+        get() = if (start == null) "ทั้งวัน" else {
+            val e = java.time.Instant.ofEpochMilli(endMs).atZone(ZoneId.systemDefault()).toLocalTime()
+            timeRange(start, e) // เช่น 16.00-23.00
+        }
 }
 
 data class CalInfo(val id: Long, val name: String, val source: String)
@@ -188,7 +191,24 @@ object CalendarSource {
 
     /** เพิ่มหรือแก้นัด คืน true ถ้าสำเร็จ */
     fun save(c: Context, d: EventDraft): Boolean = runCatching {
-        val v = ContentValues().apply {
+        val v = values(d)
+        if (d.id == null) {
+            v.put(Events.CALENDAR_ID, d.calendarId ?: return false)
+            c.contentResolver.insert(Events.CONTENT_URI, v) != null
+        } else {
+            c.contentResolver.update(ContentUris.withAppendedId(Events.CONTENT_URI, d.id), v, null, null) > 0
+        }
+    }.getOrDefault(false)
+
+    /** เพิ่มนัดใหม่ คืน id ของนัด (null ถ้าไม่สำเร็จ) */
+    fun insert(c: Context, d: EventDraft): Long? = runCatching {
+        val v = values(d)
+        v.put(Events.CALENDAR_ID, d.calendarId ?: return null)
+        c.contentResolver.insert(Events.CONTENT_URI, v)?.let { ContentUris.parseId(it) }
+    }.getOrNull()
+
+    private fun values(d: EventDraft): ContentValues {
+        return ContentValues().apply {
             put(Events.TITLE, d.title.trim())
             if (d.allDay) {
                 put(Events.ALL_DAY, 1)
@@ -206,13 +226,37 @@ object CalendarSource {
                 put(Events.DTEND, e.toInstant().toEpochMilli())
             }
         }
-        if (d.id == null) {
-            v.put(Events.CALENDAR_ID, d.calendarId ?: return false)
-            c.contentResolver.insert(Events.CONTENT_URI, v) != null
-        } else {
-            c.contentResolver.update(ContentUris.withAppendedId(Events.CONTENT_URI, d.id), v, null, null) > 0
-        }
-    }.getOrDefault(false)
+    }
+
+    /** ข้อมูลปัจจุบันของนัดหนึ่ง (เวลา = null ถ้าเป็นนัดทั้งวัน) */
+    data class EvInfo(val title: String, val date: LocalDate, val start: LocalTime?, val end: LocalTime?)
+
+    /** อ่านนัดตาม id (ไม่รวมที่ถูกลบ) คืน null ถ้าอ่านไม่ได้ เพื่อให้ผู้เรียกไม่ตัดสินว่านัดหาย */
+    fun eventInfo(c: Context, ids: Collection<Long>): Map<Long, EvInfo>? {
+        if (!hasPermission(c)) return null
+        return runCatching {
+            val out = HashMap<Long, EvInfo>()
+            ids.chunked(200).forEach { chunk ->
+                c.contentResolver.query(
+                    Events.CONTENT_URI,
+                    arrayOf(Events._ID, Events.TITLE, Events.DTSTART, Events.DTEND, Events.ALL_DAY),
+                    "${Events._ID} IN (${chunk.joinToString(",")}) AND ${Events.DELETED}=0", null, null
+                )?.use { cur ->
+                    while (cur.moveToNext()) {
+                        val allDay = cur.getInt(4) == 1
+                        val zone = if (allDay) ZoneOffset.UTC else ZoneId.systemDefault()
+                        val s = Instant.ofEpochMilli(cur.getLong(2)).atZone(zone)
+                        val e = Instant.ofEpochMilli(cur.getLong(3)).atZone(zone)
+                        out[cur.getLong(0)] = EvInfo(
+                            cur.getString(1)?.trim().orEmpty(), s.toLocalDate(),
+                            if (allDay) null else s.toLocalTime(), if (allDay) null else e.toLocalTime()
+                        )
+                    }
+                }
+            }
+            out as Map<Long, EvInfo>
+        }.getOrNull()
+    }
 
     /** ขอให้ระบบซิงก์ปฏิทินทุกบัญชีทันที (iCloud ผ่าน DAVx⁵ และ Google) */
     fun requestSync(c: Context) {

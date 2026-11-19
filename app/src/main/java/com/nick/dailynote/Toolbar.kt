@@ -36,10 +36,12 @@ enum class Tool(val key: String, val label: String, val icon: ImageVector) {
     Heading("heading", "หัวข้อ  # → ## → ###", Ico.Heading),
     Bold("bold", "ตัวหนา", Ico.Bold),
     Underline("underline", "ขีดเส้นใต้", Ico.Underline),
+    Strike("strike", "ขีดฆ่า", Ico.Strike),
     Emoji("emoji", "อีโมจิ", Ico.Smile),
     Bullet("bullet", "รายการแบบจุด", Ico.BulletList),
     Todo("todo", "รายการที่ต้องทำ", Ico.CheckSquare),
     Table("table", "ตาราง", Ico.Table),
+    Calc("calc", "เครื่องคิดเลข", Ico.Calculator),
     Divider("divider", "เส้นคั่น", Ico.Divider),
     Outdent("outdent", "ลดระดับ", Ico.Outdent),
     Indent("indent", "เพิ่มระดับ", Ico.Indent),
@@ -106,10 +108,11 @@ fun openMeb(c: Context) {
 
 /** ใช้เครื่องมือกับข้อความ (null = ไม่แก้ข้อความ เช่น เปิดแอป / Undo ที่หน้าบันทึกจัดการเอง) */
 fun applyTool(c: Context, t: Tool, v: TextFieldValue): TextFieldValue? = when (t) {
-    Tool.Undo, Tool.Emoji, Tool.HideKeyboard -> null
+    Tool.Undo, Tool.Emoji, Tool.Calc, Tool.HideKeyboard -> null
     Tool.Heading -> cycleHeader(v)
     Tool.Bold -> toggleWrap(v, BOLD_MARK)
     Tool.Underline -> toggleWrap(v, UNDERLINE_MARK)
+    Tool.Strike -> toggleWrap(v, STRIKE_MARK)
     Tool.Bullet -> toggleList(v, todo = false)
     Tool.Todo -> toggleList(v, todo = true)
     Tool.Table -> insertTable(v)

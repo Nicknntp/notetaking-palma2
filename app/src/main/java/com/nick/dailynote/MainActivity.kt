@@ -35,6 +35,8 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -126,7 +128,30 @@ private fun App(store: NoteStore, selected: MutableState<LocalDate>) {
     // ประวัติการเปิดหน้า: ปุ่มย้อนกลับ = กลับไปหน้าก่อนหน้าจริง ๆ
     val stack = remember { mutableStateListOf(Screen.Editor) }
     val screen = stack.last()
-    fun go(s: Screen) { if (stack.last() != s) stack.add(s) }
+    val appCtx = LocalContext.current
+    var notesInitial by remember { mutableStateOf<String?>(null) }
+    var sideOpen by remember { mutableStateOf(false) }
+    var navNonce by remember { mutableIntStateOf(0) }
+    fun go(s: Screen) {
+        if (s == Screen.Notes) notesInitial = null
+        if (stack.last() != s) stack.add(s)
+    }
+    /** ไปหน้าจากแถบข้าง: เริ่มกองประวัติใหม่ที่หน้าวันนี้ */
+    fun navigate(key: String) {
+        sideOpen = false
+        stack.clear(); stack.add(Screen.Editor)
+        notesInitial = null
+        when {
+            key == "today" -> selected.value = LocalDate.now()
+            key == "notes" -> stack.add(Screen.Notes)
+            key == "calendar" -> { AppSettings.setCalendarMode(appCtx, 1); stack.add(Screen.Calendar) }
+            key == "habits" -> { AppSettings.setCalendarMode(appCtx, 0); stack.add(Screen.Calendar) }
+            key == "budget" || key == "report" -> { notesInitial = key; stack.add(Screen.Notes) }
+            key == "settings" -> stack.add(Screen.Settings)
+            key.startsWith("note:") -> { notesInitial = key.removePrefix("note:"); stack.add(Screen.Notes) }
+        }
+        navNonce++
+    }
     fun back() { if (stack.size > 1) stack.removeAt(stack.lastIndex) }
     fun home() { stack.clear(); stack.add(Screen.Editor) }
 
@@ -137,13 +162,15 @@ private fun App(store: NoteStore, selected: MutableState<LocalDate>) {
     BackHandler(enabled = stack.size > 1) { back() }
 
     val date = selected.value
-    val appCtx = LocalContext.current
     var font by remember { mutableStateOf(AppSettings.font(appCtx)) }
     // เปิดหน้าปฏิทินที่แท็บ "นิสัย"
     val openHabits = { AppSettings.setCalendarMode(appCtx, 0); go(Screen.Calendar) }
 
-    CompositionLocalProvider(LocalFont provides font.family) {
-    Column(Modifier.fillMaxSize().background(PAPER).padding(horizontal = 16.dp, vertical = 10.dp)) {
+    val openSide: () -> Unit = { sideOpen = true }
+    CompositionLocalProvider(LocalFont provides font.family, LocalOpenSidebar provides openSide) {
+    Box(Modifier.fillMaxSize().background(PAPER)) {
+    Column(Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 10.dp)) {
+      key(navNonce) {
         when (screen) {
             Screen.Settings -> SettingsScreen(font, onFont = { font = it; AppSettings.setFont(appCtx, it) }) { back() }
             Screen.Calendar -> CalendarScreen(
@@ -155,23 +182,24 @@ private fun App(store: NoteStore, selected: MutableState<LocalDate>) {
                 // เปิดบันทึกของวันที่เลือก
                 selected.value = it; home()
             }
-            Screen.Notes -> NotesScreen(onBack = { back() })
+            Screen.Notes -> NotesScreen(initial = notesInitial, onBack = { back() }, onCalendar = { AppSettings.setCalendarMode(appCtx, 1); go(Screen.Calendar) })
             Screen.Editor -> {
                 TopBar(
                     date = date,
                     onPrev = { selected.value = date.minusDays(1) },
                     onNext = { selected.value = date.plusDays(1) },
                     onToday = { selected.value = LocalDate.now() },
-                    onCalendar = { go(Screen.Calendar) },
+                    onCalendar = { AppSettings.setCalendarMode(appCtx, 1); go(Screen.Calendar) },
                     onNotes = { go(Screen.Notes) },
                     onHabits = openHabits,
                     onSettings = { go(Screen.Settings) }
                 )
-                // การ์ดนิสัยของวันนั้น (เฉพาะนิสัยที่กำลังสร้างในช่วงวันนี้)
-                HabitStrip(date, onOpenAll = openHabits)
                 EditorScreen(date.toString(), load = { store.read(date) }, save = { store.write(date, it) })
             }
         }
+      }
+    }
+    if (sideOpen) SidebarPanel(onNavigate = { navigate(it) }, onClose = { sideOpen = false })
     }
     }
 }
@@ -198,6 +226,8 @@ private fun TopBar(
         IconBtn(Ico.Calendar, onClick = onCalendar)
         Spacer(Modifier.width(8.dp))
         IconBtn(Ico.Settings, onClick = onSettings)
+        Spacer(Modifier.width(8.dp))
+        MenuBtn()
     }
     Spacer(Modifier.height(12.dp))
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -235,6 +265,7 @@ internal fun EditorScreen(key: String, load: () -> String, save: (String) -> Uni
     val baseStyle = TextStyle(color = INK, fontSize = 20.sp, lineHeight = 34.sp, fontFamily = family)
     val tf = remember(family) { NoteTransformation(measurer, baseStyle, density) }
     var showEmoji by remember { mutableStateOf(false) }
+    var showCalc by remember { mutableStateOf(false) }
     val noteFocus = remember { FocusRequester() }
     // แตะสองครั้ง = เลือกคำ พร้อมหมุดลากขยาย/ย่อช่วงที่เลือก
     var selHandles by remember(key) { mutableStateOf(false) }
@@ -405,9 +436,14 @@ internal fun EditorScreen(key: String, load: () -> String, save: (String) -> Uni
                                     (up.position - down.position).getDistance() < viewConfiguration.touchSlop
                                 ) {
                                     val toggled = toggleCheckboxAt(tfvState.value, l, up.position, tf)
+                                    val marginTarget = if (toggled == null) listMarginTapTarget(tfvState.value, l, up.position, tf) else null
                                     if (toggled != null) {
                                         up.consume()
                                         update(toggled)
+                                        lastUpTime = 0L
+                                    } else if (marginTarget != null) {
+                                        up.consume()
+                                        update(tfvState.value.copy(selection = TextRange(marginTarget)))
                                         lastUpTime = 0L
                                     } else if (up.uptimeMillis - lastUpTime < viewConfiguration.doubleTapTimeoutMillis &&
                                         (up.position - lastUpPos).getDistance() < viewConfiguration.touchSlop * 4
@@ -444,18 +480,26 @@ internal fun EditorScreen(key: String, load: () -> String, save: (String) -> Uni
             Spacer(Modifier.height(6.dp))
             EmojiPanel { e -> update(insertText(tfv, e), fromTool = true) }
         }
+        if (showCalc) {
+            Spacer(Modifier.height(6.dp))
+            CalcPanel { s -> update(insertText(tfv, s), fromTool = true) }
+        }
         val keyboardCtl = LocalSoftwareKeyboardController.current
         val keyboardShown = rememberKeyboardVisible()
+        // โหมดเครื่องคิดเลข: คีย์บอร์ดย่อลงและอยู่ลงไว้
+        LaunchedEffect(showCalc, keyboardShown) { if (showCalc && keyboardShown) keyboardCtl?.hide() }
         if (tools.isNotEmpty()) {
             Spacer(Modifier.height(6.dp))
             NoteToolbar(tools, keyboardShown) { t ->
                 when (t) {
                     Tool.Undo -> undo()
                     Tool.HideKeyboard -> if (keyboardShown) keyboardCtl?.hide() else {
+                        showCalc = false
                         runCatching { noteFocus.requestFocus() }
                         keyboardCtl?.show()
                     }
                     Tool.Emoji -> showEmoji = !showEmoji
+                    Tool.Calc -> { showCalc = !showCalc; if (showCalc) { showEmoji = false; keyboardCtl?.hide() } }
                     else -> applyTool(ctx, t, tfv)?.let { update(it, fromTool = true) }
                 }
             }
@@ -580,7 +624,13 @@ private fun SettingsScreen(font: AppFont, onFont: (AppFont) -> Unit, onBack: () 
         }
 
         Spacer(Modifier.height(14.dp))
+        SidebarSettings()
+
+        Spacer(Modifier.height(14.dp))
         ToolbarSettings()
+
+        Spacer(Modifier.height(14.dp))
+        ShiftSettings()
 
         Spacer(Modifier.height(14.dp))
 

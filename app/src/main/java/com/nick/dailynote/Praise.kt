@@ -73,8 +73,8 @@ object Praises {
         val streak = HabitStats.currentStreak(h, date)
         if (h.daily) milestones[streak]?.let { return it }
         if (allDone) return Praise("🎊", "ครบทุกนิสัยของวันนี้!", "วันนี้สมบูรณ์แบบ พักผ่อนได้เต็มที่เลย")
-        if (!h.daily && HabitStats.weekCount(h, weekStartOf(date)) == h.perWeek) {
-            return Praise("🎯", "ครบเป้าสัปดาห์นี้แล้ว!", "“${h.name}” ${h.perWeek} ครั้งตามที่ตั้งใจ")
+        if (!h.daily && HabitStats.weekCount(h, weekStartOf(date)) == h.goalFor(weekStartOf(date))) {
+            return Praise("🎯", "ครบเป้าสัปดาห์นี้แล้ว!", "“${h.name}” ${h.goalFor(weekStartOf(date))} ครั้งตามที่ตั้งใจ")
         }
         return general.random().named()
     }
